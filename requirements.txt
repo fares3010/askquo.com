@@ -1,0 +1,24 @@
+# Core Django and Web Framework
+Django>=5.2,<5.3  # Pin to major version for stability
+django-allauth>=0.61.1,<0.62.0  # Latest stable version with security fixes
+django-cors-headers>=4.3.1,<4.4.0  # Latest stable version
+djangorestframework>=3.14.0,<3.15.0  # Latest stable version
+
+# Database
+psycopg2-binary>=2.9.9,<3.0.0  # Latest stable version for PostgreSQL
+
+# Environment and Deployment
+python-dotenv>=1.0.1,<1.1.0  # Latest stable version
+whitenoise>=6.6.0,<6.7.0  # Latest stable version for static files
+gunicorn>=21.2.0,<21.3.0  # Latest stable version for production server
+
+# Testing and Development
+pytest>=7.4.3,<7.5.0  # Latest stable version
+pytest-django>=4.5.2,<4.6.0  # Latest stable version
+pytest-mock>=3.14.0,<3.15.0  # Latest stable version
+pytest-cov>=4.1.0,<4.2.0  # Latest stable version
+pytest-asyncio>=0.21.0,<0.22.0  # Latest stable version
+numpy>=1.26.0,<1.27.0  # Latest stable version
+django-debug-toolbar>=4.1.0,<4.2.0  # Latest stable version
+django-extensions>=3.1.0,<3.2.0  # Latest stable version
+
