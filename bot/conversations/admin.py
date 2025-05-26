@@ -10,8 +10,8 @@ from .models import (
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ('conversation_id', 'conversation_name', 'agent', 'check_is_archived', 'check_is_deleted', 'is_favorite')
-    list_filter = ('check_is_archived', 'check_is_deleted', 'is_favorite')
+    list_display = ('conversation_id', 'conversation_name', 'agent', 'is_favorite')
+    list_filter = ('is_favorite', 'created_at')
     search_fields = ('conversation_name', 'agent__user__username','agent__name')
     ordering = ('-conversation_id',)
     readonly_fields = ('conversation_id',)
@@ -19,7 +19,7 @@ class ConversationAdmin(admin.ModelAdmin):
 @admin.register(ConversationMessages)
 class ConversationMessagesAdmin(admin.ModelAdmin):
     list_display = ('message_id', 'conversation', 'sender_id', 'sender_type', 'message_text', 'message_time', 'is_read', 'is_deleted', 'is_archived')
-    list_filter = ('is_read', 'is_deleted', 'is_archived','conversation__conversation_name','conversation__agent__user__username','conversation__agent__name')
+    list_filter = ('is_read', 'is_deleted', 'is_archived','conversation__conversation_name', 'conversation__agent__name')
     search_fields = ('conversation__conversation_name', "conversation__agent__user__username", "conversation__agent__name")
     ordering = ('-message_id',)
     readonly_fields = ("message_id",)

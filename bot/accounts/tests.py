@@ -1,113 +1,98 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from rest_framework.test import APITestCase, APIClient
+from rest_framework import status
 from .forms import UserRegistrationForm, UserProfileForm
 from django.core.files.uploadedfile import SimpleUploadedFile
 import os
 
 User = get_user_model()
 
-class UserModelTest(TestCase):
+class UserAPITest(APITestCase):
     def setUp(self):
+        self.client = APIClient()
         self.user_data = {
-            'email': 'farsashraf44@gmail.com',
+            'email': 'test@example.com',
             'password': 'testpass123',
             'full_name': 'Test User'
         }
         self.user = User.objects.create_user(**self.user_data)
+        self.client.force_authenticate(user=self.user)
+        self.base_url = '/api/accounts/'
 
-    def test_user_creation(self):
-        self.assertEqual(self.user.email, self.user_data['email'])
-        self.assertEqual(self.user.full_name, self.user_data['full_name'])
-        self.assertTrue(self.user.check_password(self.user_data['password']))
-
-    def test_user_str_method(self):
-        self.assertEqual(str(self.user), self.user.email)
-
-class UserRegistrationTest(TestCase):
-    def setUp(self):
-        self.client = Client()
-        self.register_url = reverse('accounts:register')
-        self.valid_data = {
-            'email': 'farsashraf44@gmail.com',
-            'full_name': 'New User',
-            'password1': 'complexpass123',
-            'password2': 'complexpass123'
+    def test_user_registration_api(self):
+        url = f'{self.base_url}register/'
+        data = {
+            'email': 'new@example.com',
+            'password': 'newpass123',
+            'password2': 'newpass123',
+            'full_name': 'New API User'
         }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(User.objects.filter(email='new@example.com').exists())
 
-    def test_registration_form_valid(self):
-        form = UserRegistrationForm(data=self.valid_data)
-        self.assertTrue(form.is_valid())
+    def test_user_login_api(self):
+        url = f'{self.base_url}login/'
+        data = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('token', response.data)
 
-    def test_registration_form_invalid(self):
-        invalid_data = self.valid_data.copy()
-        invalid_data['password2'] = 'differentpass'
-        form = UserRegistrationForm(data=invalid_data)
-        self.assertFalse(form.is_valid())
+    def test_user_profile_api(self):
+        url = f'{self.base_url}profile/'
+        # Test GET profile
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], self.user.email)
 
-    def test_registration_view(self):
-        response = self.client.post(self.register_url, self.valid_data)
-        self.assertEqual(response.status_code, 302)  # Redirect after success
-        self.assertTrue(User.objects.filter(email=self.valid_data['email']).exists())
+        # Test PUT profile update
+        update_data = {
+            'full_name': 'Updated API User'
+        }
+        response = self.client.put(url, update_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['full_name'], 'Updated API User')
 
-class UserProfileTest(TestCase):
+    def test_user_logout_api(self):
+        url = f'{self.base_url}logout/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_unauthorized_access(self):
+        self.client.force_authenticate(user=None)
+        url = f'{self.base_url}profile/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+class UserProfileImageAPITest(APITestCase):
     def setUp(self):
-        self.client = Client()
+        self.client = APIClient()
         self.user = User.objects.create_user(
-            email='farsashraf44@gmail.com',
+            email='test@example.com',
             password='testpass123',
-            full_name='Profile User'
+            full_name='Test User'
         )
-        self.client.login(email='farsashraf44@gmail.com', password='testpass123')
-        self.profile_url = reverse('accounts:profile')
+        self.client.force_authenticate(user=self.user)
+        self.profile_url = '/api/accounts/profile/'
 
-    def test_profile_view_authenticated(self):
-        response = self.client.get(self.profile_url)
-        self.assertEqual(response.status_code, 200)
-
-    def test_profile_view_unauthenticated(self):
-        self.client.logout()
-        response = self.client.get(self.profile_url)
-        self.assertEqual(response.status_code, 302)  # Redirect to login
-
-    def test_profile_form_update(self):
+    def test_profile_image_upload(self):
         test_image = SimpleUploadedFile(
             name='test_image.jpg',
-            content=b'',  # Empty file for testing
+            content=b'fake image content',
             content_type='image/jpeg'
         )
-        form_data = {
-            'full_name': 'Updated Name',
+        data = {
             'profile_image': test_image
         }
-        form = UserProfileForm(data=form_data, files={'profile_image': test_image}, instance=self.user)
-        self.assertTrue(form.is_valid())
-
-class UserLoginLogoutTest(TestCase):
-    def setUp(self):
-        self.client = Client()
-        self.login_url = reverse('accounts:login')
-        self.logout_url = reverse('accounts:logout')
-        self.user = User.objects.create_user(
-            email='farsashraf44@gmail.com',
-            password='testpass123'
+        response = self.client.put(
+            self.profile_url,
+            data,
+            format='multipart'
         )
-
-    def test_login_success(self):
-        response = self.client.post(self.login_url, {
-            'email': 'farsashraf44@gmail.com',
-            'password': 'testpass123'
-        })
-        self.assertEqual(response.status_code, 302)  # Redirect after success
-
-    def test_login_failure(self):
-        response = self.client.post(self.login_url, {
-            'email': 'farsashraf44@gmail.com',
-            'password': 'wrongpass'
-        })
-        self.assertEqual(response.status_code, 200)  # Stay on login page
-
-    def test_logout(self):
-        self.client.login(email='farsashraf44@gmail.com', password='testpass123')
-        response = self.client.get(self.logout_url)
-        self.assertEqual(response.status_code, 302)  # Redirect after logout
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('profile_image', response.data)

@@ -16,16 +16,16 @@ class AgentDocumentsAdmin(admin.ModelAdmin):
     readonly_fields = ('document_id', 'created_at', 'updated_at')
 
 class AgentIntegrationsAdmin(admin.ModelAdmin):
-    list_display = ('integration_id', 'agent', 'integration_type', 'status', 'created_at')
-    search_fields = ('agent__name', 'integration_type')
-    list_filter = ('integration_type', 'status', 'created_at')
+    list_display = ('integration_id', 'agent', 'integration_name', 'integration_category', 'integration_auth_status', 'created_at')
+    search_fields = ('agent__name', 'integration_name', 'integration_category')
+    list_filter = ('integration_category', 'integration_auth_status', 'created_at')
     ordering = ('-created_at',)
     readonly_fields = ('integration_id', 'created_at', 'updated_at')
 
 class AgentEmbeddingsAdmin(admin.ModelAdmin):
-    list_display = ('embedding_id', 'agent', 'embedding_type', 'created_at')
-    search_fields = ('agent__name', 'embedding_type')
-    list_filter = ('embedding_type', 'created_at')
+    list_display = ('embedding_id', 'agent', 'embedding_model', 'created_at')
+    search_fields = ('agent__name', 'embedding_model')
+    list_filter = ('embedding_model', 'created_at')
     ordering = ('-created_at',)
     readonly_fields = ('embedding_id', 'created_at', 'updated_at')
 

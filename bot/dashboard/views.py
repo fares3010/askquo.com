@@ -91,5 +91,5 @@ def engagement_stats(request):
 
 @api_view(['GET'])
 def api_health_check(request):
-    return Response({"status": "ok"}, status=status.HTTP_200_OK)
+    return Response({"status": "Api is working"}, status=status.HTTP_200_OK)
     

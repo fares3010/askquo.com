@@ -1,13 +1,25 @@
-from django.test import TestCase
+from django.test import TestCase, Client
 from django.contrib.auth.models import User
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
 from .models import SubscriptionPlan, UserSubscription, PlanFeature
 from django.utils import timezone
-from django.db.models import Sum
 from datetime import timedelta
+import json
 
-# Create your tests here.
-class SubscriptionPlanTests(TestCase):
+class SubscriptionPlanAPITests(TestCase):
     def setUp(self):
+        """Set up test data for API tests"""
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.client.force_authenticate(user=self.user)
+        
+        # Create test plan and feature
         self.plan = SubscriptionPlan.objects.create(
             plan_name="Test Plan",
             plan_price=10.00,
@@ -19,169 +31,124 @@ class SubscriptionPlanTests(TestCase):
             feature_name="Test Feature",
             feature_limit=100
         )
+        
+        self.plan_data = {
+            'plan_name': 'New Plan',
+            'plan_price': 20.00,
+            'plan_period': 'monthly',
+            'is_active': True
+        }
 
-    def test_plan_creation(self):
-        self.assertEqual(self.plan.plan_name, "Test Plan")
-        self.assertEqual(self.plan.plan_price, 10.00)
-        self.assertEqual(self.plana.plan_period, "monthly")
-        self.assertTrue(self.plan.is_active)
+    def test_get_plans_list(self):
+        """Test retrieving list of subscription plans"""
+        url = reverse('subscription-plan-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        
+        # Verify response data
+        plan = response.data[0]
+        self.assertEqual(plan['plan_name'], 'Test Plan')
+        self.assertEqual(float(plan['plan_price']), 10.00)
+        self.assertEqual(plan['plan_period'], 'monthly')
 
-    def test_feature_creation(self):
-        self.assertEqual(self.feature.feature_name, "Test Feature")
-        self.assertEqual(self.feture.feature_limit, 100)
-        self.assertTrue(self.feature.is_active)
+    def test_get_plan_detail(self):
+        """Test retrieving specific plan details"""
+        url = reverse('subscription-plan-detail', args=[self.plan.plan_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify response data
+        self.assertEqual(response.data['plan_name'], 'Test Plan')
+        self.assertEqual(float(response.data['plan_price']), 10.00)
+        self.assertEqual(response.data['plan_period'], 'monthly')
 
-    def test_plan_details(self):
-        details = self.plan.get_plan_details()
-        self.assertEqual(details['plan_name'], "Test Plan")
-        self.assertEqual(details['plan_price'], 10.00)
-        self.assertEqual(details['plan_period'], "monthly")
-        self.assertTrue(details['is_active'])
+    def test_create_plan(self):
+        """Test creating a new subscription plan"""
+        url = reverse('subscription-plan-list')
+        response = self.client.post(url, self.plan_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(SubscriptionPlan.objects.filter(plan_name='New Plan').exists())
+        
+        # Verify response data
+        self.assertEqual(response.data['plan_name'], 'New Plan')
+        self.assertEqual(float(response.data['plan_price']), 20.00)
+        self.assertEqual(response.data['plan_period'], 'monthly')
 
-    def test_feature_count(self):
-        self.assertEqual(self.plan.feature_count(), 1)
+    def test_update_plan(self):
+        """Test updating a subscription plan"""
+        url = reverse('subscription-plan-detail', args=[self.plan.plan_id])
+        update_data = self.plan_data.copy()
+        update_data['plan_name'] = 'Updated Plan'
+        
+        response = self.client.put(url, update_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify update
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.plan_name, 'Updated Plan')
+        self.assertEqual(float(self.plan.plan_price), 20.00)
 
-    def test_feature_accessible(self):
-        self.assertTrue(self.plan.feature_accessible("Test Feature"))
+    def test_delete_plan(self):
+        """Test deleting a subscription plan"""
+        url = reverse('subscription-plan-detail', args=[self.plan.plan_id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(SubscriptionPlan.objects.filter(plan_id=self.plan.plan_id).exists())
 
-    def test_feature_limit(self):
-        self.assertEqual(self.plan.feature_limit("Test Feature"), 100)
-
-    def test_plan_duration_days(self):
-        self.assertEqual(self.plan.get_plan_duration_days(), 30)
-
-    def test_expiry_date(self):
-        self.assertEqual(self.plan.get_expiry_date(), timezone.now() + timedelta(days=30))
-
-    def test_feature_count(self):
-        self.assertEqual(self.plan.feature_count(), 1)
-
-    def test_feature_accessible(self):
-        self.assertTrue(self.plan.feature_accessible("Test Feature"))
-
-    def test_feature_limit(self):
-        self.assertEqual(self.plan.feature_limit("Test Feature"), 100)
-
-    def test_plan_price_display(self):
-        self.assertEqual(self.plan.get_price_display(), "10.00 USD")
-
-    def test_plan_to_dict(self):
-        data = self.plan.to_dict()
-        self.assertEqual(data['plan_name'], "Test Plan")
-        self.assertEqual(data['plan_price'], 10.00)
-        self.assertEqual(data['plan_period'], "monthly")
-        self.assertTrue(data['is_active'])
-
-    def test_user_subscription_creation(self):
-        user = User.objects.create_user(username="testuser", password="testpassword")
+    def test_get_user_subscriptions(self):
+        """Test retrieving user's subscriptions"""
+        # Create test subscription
         subscription = UserSubscription.objects.create(
-            user=user,
+            user=self.user,
             plan=self.plan,
             stripe_subscription_id="sub_1234567890"
         )
-        self.assertEqual(subscription.user, user)
-        self.assertEqual(subscription.plan, self.plan)
-        self.assertEqual(subscription.stripe_subscription_id, "sub_1234567890")
+        
+        url = reverse('user-subscription-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        
+        # Verify response data
+        sub = response.data[0]
+        self.assertEqual(sub['plan']['plan_name'], 'Test Plan')
+        self.assertEqual(sub['stripe_subscription_id'], 'sub_1234567890')
 
-    def test_user_subscription_to_dict(self):
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )   
-        data = subscription.to_dict()
-        self.assertEqual(data['user_id'], user.id)
-        self.assertEqual(data['plan_id'], self.plan.plan_id)
-        self.assertEqual(data['stripe_subscription_id'], "sub_1234567890")
+    def test_create_user_subscription(self):
+        """Test creating a new user subscription"""
+        url = reverse('user-subscription-list')
+        data = {
+            'plan': self.plan.plan_id,
+            'stripe_subscription_id': 'sub_new123'
+        }
+        
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(UserSubscription.objects.filter(stripe_subscription_id='sub_new123').exists())
 
-    def test_user_subscription_status(self):    
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )   
-        self.assertTrue(subscription.is_active)
+    def test_unauthorized_access(self):
+        """Test unauthorized access to subscription endpoints"""
+        self.client.force_authenticate(user=None)
+        
+        # Test plan list endpoint
+        url = reverse('subscription-plan-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        
+        # Test subscription list endpoint
+        url = reverse('user-subscription-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_user_subscription_usage(self):
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,  
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )
-        self.assertEqual(subscription.usage_start_date, timezone.now())
-
-    def test_user_subscription_usage_limits(self):  
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )   
-        self.assertEqual(subscription.usage_limits(), self.plan.feature_limit("Test Feature"))
-
-    def test_user_subscription_usage_history(self):
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )   
-        self.assertEqual(subscription.usage_history(), [])
-
-    def test_user_subscription_usage_limits(self):  
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )      
-        self.assertEqual(subscription.usage_limits(), self.plan.feature_limit("Test Feature"))
-
-    def test_user_subscription_usage_history(self):
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )   
-        self.assertEqual(subscription.usage_history(), [])
-
-    def test_user_subscription_usage_limits(self):    
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )      
-        self.assertEqual(subscription.usage_limits(), self.plan.feature_limit("Test Feature"))
-
-    def test_user_subscription_usage_history(self):
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )   
-        self.assertEqual(subscription.usage_history(), [])
-
-    def test_user_subscription_usage_limits(self):      
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )      
-        self.assertEqual(subscription.usage_limits(), self.plan.feature_limit("Test Feature"))
-
-    def test_user_subscription_usage_history(self):
-        user = User.objects.create_user(username="testuser", password="testpassword")
-        subscription = UserSubscription.objects.create(
-            user=user,
-            plan=self.plan,
-            stripe_subscription_id="sub_1234567890"
-        )   
-        self.assertEqual(subscription.usage_history(), [])              
-
+    def test_invalid_plan_data(self):
+        """Test API with invalid plan data"""
+        url = reverse('subscription-plan-list')
+        invalid_data = {
+            'plan_name': None,  # Invalid data
+            'plan_price': -10.00,  # Invalid price
+            'plan_period': 'invalid'  # Invalid period
+        }
+        
+        response = self.client.post(url, invalid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

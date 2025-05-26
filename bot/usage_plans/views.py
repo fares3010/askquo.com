@@ -4,7 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import SubscriptionPlan, UserSubscription, PlanFeature
 from django.utils import timezone
-\
+
+
 # Create your views here.
 
 @api_view(["GET"])

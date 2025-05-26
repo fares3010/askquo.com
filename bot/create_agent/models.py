@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.utils import timezone
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
@@ -9,7 +9,7 @@ import numpy as np
 
 class Agent(models.Model):
     user = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='agents',
         help_text="The user who owns this agent."
@@ -204,7 +204,7 @@ class AgentIntegrations(models.Model):
     agent = models.ForeignKey(
         Agent,
         on_delete=models.CASCADE,
-        related_name='integrations',
+        related_name='agent_integrations',
         help_text="The agent this integration belongs to."
     )
     integration_id = models.AutoField(

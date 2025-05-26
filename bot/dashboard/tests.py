@@ -7,8 +7,9 @@ from dashboard.models import Dashboard
 from conversations.models import Conversation
 from create_agent.models import Agent
 import pytest
+import json
 
-class DashboardTestCase(TestCase):
+class DashboardAPITestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         # Create test data that will be used by all test methods
@@ -23,122 +24,106 @@ class DashboardTestCase(TestCase):
             is_active=True
         )
         cls.client = Client()
+        cls.client.login(username='testuser', password='testpassword')
 
     def setUp(self):
-        # Clear cache before each test
         cache.clear()
-        # Additional setup if needed
         self.dashboard.refresh_from_db()
 
     def tearDown(self):
-        # Clean up after each test
         cache.clear()
 
-    def test_dashboard_creation(self):
-        """Test basic dashboard creation and attributes"""
-        self.assertIsNotNone(self.dashboard.dashboard_id)
-        self.assertEqual(self.dashboard.user, self.user)
-        self.assertEqual(self.dashboard.dashboard_type, 'test_dashboard')
-        self.assertTrue(self.dashboard.is_active)
-        self.assertFalse(self.dashboard.is_deleted)
-        self.assertIsNotNone(self.dashboard.created_at)
-        self.assertIsNotNone(self.dashboard.updated_at)
+    def test_dashboard_api_list(self):
+        """Test retrieving dashboard list via API"""
+        url = reverse('dashboard-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['dashboard_type'], 'test_dashboard')
 
-    @pytest.mark.django_db
-    def test_dashboard_stats_with_data(self):
-        """Test dashboard stats with actual conversation data"""
-        # Create test conversations
-        conversation = Conversation.objects.create(
+    def test_dashboard_api_detail(self):
+        """Test retrieving specific dashboard details via API"""
+        url = reverse('dashboard-detail', args=[self.dashboard.dashboard_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['dashboard_type'], 'test_dashboard')
+        self.assertTrue(data['is_active'])
+
+    def test_dashboard_api_create(self):
+        """Test creating a new dashboard via API"""
+        url = reverse('dashboard-list')
+        data = {
+            'dashboard_type': 'new_dashboard',
+            'is_active': True
+        }
+        response = self.client.post(url, data, content_type='application/json')
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(Dashboard.objects.filter(dashboard_type='new_dashboard').exists())
+
+    def test_dashboard_api_update(self):
+        """Test updating dashboard via API"""
+        url = reverse('dashboard-detail', args=[self.dashboard.dashboard_id])
+        data = {
+            'dashboard_type': 'updated_dashboard',
+            'is_active': False
+        }
+        response = self.client.patch(url, data, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.dashboard.refresh_from_db()
+        self.assertEqual(self.dashboard.dashboard_type, 'updated_dashboard')
+        self.assertFalse(self.dashboard.is_active)
+
+    def test_dashboard_api_delete(self):
+        """Test deleting dashboard via API"""
+        url = reverse('dashboard-detail', args=[self.dashboard.dashboard_id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Dashboard.objects.filter(dashboard_id=self.dashboard.dashboard_id).exists())
+
+    def test_dashboard_api_stats(self):
+        """Test retrieving dashboard statistics via API"""
+        # Create test conversation
+        Conversation.objects.create(
             user=self.user,
             is_active=True,
             number_of_agent_messages=5
         )
         
-        # Test stats after data creation
-        self.dashboard.update_stats()
+        url = reverse('dashboard-stats', args=[self.dashboard.dashboard_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
         
-        # Test conversation stats
-        self.assertEqual(self.dashboard.total_conversations(), 1)
-        self.assertEqual(self.dashboard.active_conversations(), 1)
-        self.assertEqual(self.dashboard.inactive_conversations(), 0)
-        
-        # Test response stats
-        self.assertEqual(self.dashboard.total_responses(), 5)
-        
-        # Test change rates
-        self.assertIsInstance(self.dashboard.conversations_change_rate(), float)
-        self.assertIsInstance(self.dashboard.active_conversations_change_rate(), float)
+        # Verify stats data structure
+        self.assertIn('total_conversations', data)
+        self.assertIn('active_conversations', data)
+        self.assertIn('total_responses', data)
+        self.assertEqual(data['total_conversations'], 1)
+        self.assertEqual(data['total_responses'], 5)
 
-    def test_dashboard_stats_empty(self):
-        """Test dashboard stats with no data"""
-        self.dashboard.update_stats()
+    def test_dashboard_api_unauthorized(self):
+        """Test unauthorized access to dashboard API"""
+        self.client.logout()
         
-        # Test all stats return expected default values
-        stats = {
-            'total_conversations': 0,
-            'active_conversations': 0,
-            'inactive_conversations': 0,
-            'total_of_agents': 0,
-            'active_agents': 0,
-            'inactive_agents': 0,
-            'avg_response_time': 0,
-            'user_satisfaction_rate': 0
+        # Test list endpoint
+        url = reverse('dashboard-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 401)
+        
+        # Test detail endpoint
+        url = reverse('dashboard-detail', args=[self.dashboard.dashboard_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 401)
+
+    def test_dashboard_api_invalid_data(self):
+        """Test API with invalid data"""
+        url = reverse('dashboard-list')
+        data = {
+            'dashboard_type': None,  # Invalid data
+            'is_active': True
         }
-        
-        for stat_name, expected_value in stats.items():
-            method = getattr(self.dashboard, stat_name)
-            self.assertEqual(method(), expected_value, f"{stat_name} failed")
-
-    def test_dashboard_admin_access(self):
-        """Test admin interface access and permissions"""
-        # Test unauthorized access
-        response = self.client.get(reverse('admin:dashboard_dashboard_changelist'))
-        self.assertEqual(response.status_code, 302)  # Redirects to login
-        
-        # Test authorized access
-        self.client.login(username='testuser', password='testpassword')
-        response = self.client.get(reverse('admin:dashboard_dashboard_changelist'))
-        self.assertEqual(response.status_code, 200)
-        
-        # Test specific dashboard access
-        response = self.client.get(
-            reverse('admin:dashboard_dashboard_change', args=[self.dashboard.dashboard_id])
-        )
-        self.assertEqual(response.status_code, 200)
-
-    def test_dashboard_cache(self):
-        """Test caching of dashboard statistics"""
-        # First call should hit the database
-        first_call = self.dashboard.total_conversations()
-        
-        # Second call should use cache
-        second_call = self.dashboard.total_conversations()
-        
-        self.assertEqual(first_call, second_call)
-        
-        # Clear cache and verify new database hit
-        cache.clear()
-        third_call = self.dashboard.total_conversations()
-        self.assertEqual(first_call, third_call)
-
-    def test_dashboard_last_week_data(self):
-        """Test last week's conversation and response data"""
-        last_week_conversations = self.dashboard.last_week_conversations()
-        last_week_responses = self.dashboard.last_week_responses()
-        
-        self.assertIsInstance(last_week_conversations, dict)
-        self.assertIsInstance(last_week_responses, list)
-        self.assertEqual(len(last_week_responses), 7)
-        self.assertEqual(len(last_week_conversations), 7)
-
-    def test_dashboard_error_handling(self):
-        """Test error handling in dashboard methods"""
-        # Test with invalid data
-        self.dashboard.dashboard_type = None
-        with self.assertRaises(Exception):
-            self.dashboard.save()
-        
-        # Test with invalid user
-        self.dashboard.user = None
-        with self.assertRaises(Exception):
-            self.dashboard.save()
+        response = self.client.post(url, data, content_type='application/json')
+        self.assertEqual(response.status_code, 400)

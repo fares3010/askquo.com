@@ -1,12 +1,13 @@
 from django.core.cache import cache
 from django.db import models
+from django.conf import settings
 from django.contrib.auth.models import User
 from conversations.models import Conversation
 from create_agent.models import Agent
 from django.utils import timezone
 
 class DashboardStats(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='dashboard_stats')
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dashboard_stats')
     dashboard_id = models.AutoField(primary_key=True)
     dashboard_type = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -13,8 +13,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-
-
+import psycopg2
+import corsheaders
+from corsheaders.defaults import default_headers
 
 # Load environment variables
 load_dotenv()
@@ -29,29 +30,37 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-_)=qk!+dh_#-!%)hi3*4pnl5f^k#eyzndwp9sx^azg1-duz)sf')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() == 'false'
+DEBUG = False
 
-ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+#ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', "aws-0-eu-central-1.pooler.supabase.com,localhost,127.0.0.1,3490-156-217-3-147.ngrok-free.app").split(',')]
+#ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS').split(',')
+ALLOWED_HOSTS=["aws-0-eu-central-1.pooler.supabase.com","13.61.144.96"]
 
 # Application definition
 INSTALLED_APPS = [
+    # Third-party apps
     'corsheaders',
-    'django.contrib.sites',
     'rest_framework',
+    'rest_framework_simplejwt',  # Added for JWT authentication
+    'django.contrib.sites',  # Required for allauth
+    
     # Allauth core
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
+    
     # Social providers
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.facebook',
+    
     # Custom apps
+    'accounts.apps.AccountsConfig',  # Uncommented since AUTH_USER_MODEL references it
     'dashboard.apps.DashboardConfig',
     'conversations.apps.ConversationsConfig',
     'create_agent.apps.CreateAgentConfig',
     'integrations.apps.IntegrationsConfig',
     'usage_plans.apps.UsagePlansConfig',
-    'accounts.apps.AccountsConfig',
+    
     # Django built-in apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -60,6 +69,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 ]
+
+CSRF_TRUSTED_ORIGINS = ['https://preview--chatty-user-homebase.lovable.app','https://13.61.144.96']
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
@@ -80,9 +91,9 @@ LOGOUT_REDIRECT_URL = '/'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -93,8 +104,41 @@ MIDDLEWARE = [
 ]
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:8000,https://preview--chatty-user-homebase.lovable.app').split(',')
-CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'True').lower() == 'true'
+CORS_ALLOWED_ORIGINS = [
+    'https://preview--chatty-user-homebase.lovable.app',
+    'https://13.61.144.96',
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'ngrok-skip-browser-warning',
+    'authorization',  # Allow Authorization header for JWT
+    'content-type',
+    'accept',
+    'origin',
+    'x-requested-with',
+]
+
+
+# Note: CORS_ALLOW_ALL_ORIGINS = True overrides CORS_ALLOWED_ORIGINS
+# Consider removing this if you want to restrict origins
+#CORS_ALLOW_ALL_ORIGINS = True
+
+# ALLOWED_ORIGINS is redundant with CORS_ALLOWED_ORIGINS
+# Consider removing this if it's not used elsewhere in the codebase
+#ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
+
+
 
 ROOT_URLCONF = 'bot.urls'
 
@@ -116,17 +160,21 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bot.wsgi.application'
 
-# Database
+# Connect to Supabase via connection pooling
+
+print("Using DB password:", os.getenv("password"))
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'nzzsbnxhgbyhzbqqujcn'),
-        'USER': os.getenv('DB_USER', 'postgres.nzzsbnxhgbyhzbqqujcn'),
-        'PASSWORD': os.getenv('DB_PASSWORD', '3010168Tofa@@##'),
-        'HOST': os.getenv('DB_HOST', 'aws-0-eu-central-1.pooler.supabase.com'),
-        'PORT': os.getenv('DB_PORT', '6543'),
+        'NAME': os.getenv('dbname',),
+        'USER': os.getenv('user',),
+        'PASSWORD': os.getenv('password',),
+        'HOST': os.getenv('host',),
+        'PORT': os.getenv('port',),
         'OPTIONS': {
             'sslmode': 'require',
+            'client_encoding': 'UTF8',
         },
         'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '0')),
     }
@@ -177,7 +225,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Security settings
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    # Only enable SSL redirect for non-API URLs
+    SECURE_SSL_REDIRECT = False  # Changed to False to prevent API redirects
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
@@ -192,13 +241,47 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
-    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        # Removed IsAuthenticated to allow unauthenticated access to registration
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.MultiPartParser',
+        'rest_framework.parsers.FormParser',
+    ],
 }
+
+# JWT settings
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': False,
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+
+    'JTI_CLAIM': 'jti',
+}
+

@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.forms import ValidationError
 from django.utils import timezone
 from datetime import timedelta
-
+from django.conf import settings
 
 class SubscriptionPlan(models.Model):
     """
@@ -170,7 +170,7 @@ class UserSubscription(models.Model):
     """
     Model representing user subscriptions to plans.
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='subscriptions')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='subscriptions')
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.CASCADE, related_name='subscriptions')
     subscription_id = models.AutoField(primary_key=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe subscription ID")

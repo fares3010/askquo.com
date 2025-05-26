@@ -1,7 +1,7 @@
 from django.contrib import admin
-from .models import Dashboard
-@admin.register(Dashboard)
-class DashboardAdmin(admin.ModelAdmin):
+from .models import DashboardStats
+@admin.register(DashboardStats)
+class DashboardStatsAdmin(admin.ModelAdmin):
     list_display = ('dashboard_id', 'user', 'dashboard_type', 'created_at', 'is_active', 'is_deleted')
     list_filter = ('dashboard_type', 'is_active', 'is_deleted', 'created_at')
     search_fields = ('user__username', 'dashboard_type')
