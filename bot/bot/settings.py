@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 import psycopg2
 import corsheaders
 from corsheaders.defaults import default_headers
+from datetime import timedelta
 
 # Load environment variables
 load_dotenv()
@@ -32,17 +33,23 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-_)=qk!+dh_#-!%)hi3*
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-#ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', "aws-0-eu-central-1.pooler.supabase.com,localhost,127.0.0.1,3490-156-217-3-147.ngrok-free.app").split(',')]
-#ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS').split(',')
-ALLOWED_HOSTS=["aws-0-eu-central-1.pooler.supabase.com","13.61.144.96"]
+ALLOWED_HOSTS = [
+    "aws-0-eu-central-1.pooler.supabase.com",
+    "localhost",
+    "127.0.0.1",
+    "04a3-156-214-196-78.ngrok-free.app"
+]
 
 # Application definition
 INSTALLED_APPS = [
+    # Custom apps (must come before django.contrib.auth)
+    'accounts.apps.AccountsConfig',  # Custom user model must be loaded first
+    
     # Third-party apps
     'corsheaders',
     'rest_framework',
-    'rest_framework_simplejwt',  # Added for JWT authentication
-    'django.contrib.sites',  # Required for allauth
+    'rest_framework_simplejwt',
+    'django.contrib.sites',
     
     # Allauth core
     'allauth',
@@ -53,8 +60,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.facebook',
     
-    # Custom apps
-    'accounts.apps.AccountsConfig',  # Uncommented since AUTH_USER_MODEL references it
+    # Other custom apps
     'dashboard.apps.DashboardConfig',
     'conversations.apps.ConversationsConfig',
     'create_agent.apps.CreateAgentConfig',
@@ -70,13 +76,17 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
-CSRF_TRUSTED_ORIGINS = ['https://preview--chatty-user-homebase.lovable.app','https://13.61.144.96']
+CSRF_TRUSTED_ORIGINS = [
+    'https://preview--chatty-user-homebase.lovable.app',
+    "https://04a3-156-214-196-78.ngrok-free.app"
+]
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
+    'accounts.authentication.EmailBackend',
+    #'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 SITE_ID = 1
@@ -91,14 +101,14 @@ LOGOUT_REDIRECT_URL = '/'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',  # Required for allauth
+    'allauth.account.middleware.AccountMiddleware',
     'django.middleware.cache.UpdateCacheMiddleware',
     'django.middleware.cache.FetchFromCacheMiddleware',
 ]
@@ -122,30 +132,21 @@ CORS_ALLOW_METHODS = [
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'ngrok-skip-browser-warning',
-    'authorization',  # Allow Authorization header for JWT
+    'authorization',
     'content-type',
     'accept',
     'origin',
     'x-requested-with',
+    'x-csrftoken',
+    'x-api-key',
 ]
-
-
-# Note: CORS_ALLOW_ALL_ORIGINS = True overrides CORS_ALLOWED_ORIGINS
-# Consider removing this if you want to restrict origins
-#CORS_ALLOW_ALL_ORIGINS = True
-
-# ALLOWED_ORIGINS is redundant with CORS_ALLOWED_ORIGINS
-# Consider removing this if it's not used elsewhere in the codebase
-#ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
-
-
 
 ROOT_URLCONF = 'bot.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],  # Added templates directory
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -160,18 +161,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bot.wsgi.application'
 
-# Connect to Supabase via connection pooling
-
-print("Using DB password:", os.getenv("password"))
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('dbname',),
-        'USER': os.getenv('user',),
-        'PASSWORD': os.getenv('password',),
-        'HOST': os.getenv('host',),
-        'PORT': os.getenv('port',),
+        'NAME': os.getenv('dbname'),
+        'USER': os.getenv('user'),
+        'PASSWORD': os.getenv('password'),
+        'HOST': os.getenv('host'),
+        'PORT': os.getenv('port'),
         'OPTIONS': {
             'sslmode': 'require',
             'client_encoding': 'UTF8',
@@ -180,7 +177,6 @@ DATABASES = {
     }
 }
 
-# Cache settings
 CACHES = {
     'default': {
         'BACKEND': os.getenv('CACHE_BACKEND', 'django.core.cache.backends.locmem.LocMemCache'),
@@ -188,7 +184,6 @@ CACHES = {
     }
 }
 
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -207,45 +202,39 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
 
-# Static files
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media files
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Security settings
 if not DEBUG:
-    # Only enable SSL redirect for non-API URLs
-    SECURE_SSL_REDIRECT = False  # Changed to False to prevent API redirects
+    SECURE_SSL_REDIRECT = False
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# REST Framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
+        #'rest_framework.authentication.SessionAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        # Removed IsAuthenticated to allow unauthenticated access to registration
+        #'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -255,23 +244,22 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.MultiPartParser',
         'rest_framework.parsers.FormParser',
     ],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ],
 }
 
-# JWT settings
-from datetime import timedelta
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': False,
-
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'VERIFYING_KEY': None,
     'AUDIENCE': None,
     'ISSUER': None,
-
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',

@@ -88,6 +88,20 @@ class Agent(models.Model):
             return timezone.now() - last_msg_time < timezone.timedelta(days=15)
         return False
 
+    def create_vector_database_path(self):
+        """
+        Creates a vector database path for the agent.
+        """
+        vector_database_path = f"agents/{self.agent_id}/vector_database"
+
+        AgentVectorsDatabase.objects.create(
+            agent=self,
+            database_path=vector_database_path,
+            created_at=timezone.now(),
+            updated_at=timezone.now()
+        )
+        return vector_database_path
+
     def conversation_count(self):
         """
         Returns the number of conversations associated with this agent.
@@ -948,10 +962,6 @@ class AgentEmbeddings(models.Model):
         Returns a display name combining object type and object name.
         """
         return f"{self.object_type or 'Unknown'} - {self.object_name or 'Unnamed'}"
-
-
-
-
 
     
 class AgentWebsites(models.Model):

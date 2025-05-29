@@ -32,9 +32,9 @@ def register_view(request) -> Response:
     
     try:
         # Create new user
-        user = CustomUser.objects.create_user(
+        user = CustomUser.objects.create(
             email=email,
-            password=password,
+            password=password,  # Plain text
             full_name=full_name
         )
         
@@ -59,20 +59,28 @@ def register_view(request) -> Response:
         }, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def login_view(request) -> Response:
     """Handle user login via API"""
     email = request.data.get('email', '').strip()
     password = request.data.get('password', '')
     
+    # Validate required fields
     if not email or not password:
         return Response({
             'error': _('Please provide both email and password.')
         }, status=status.HTTP_400_BAD_REQUEST)
         
-    user = authenticate(request, email=email, password=password)
-    
-    if user is not None:
-        if user.is_active:
+    try:
+        user = CustomUser.objects.get(email=email)
+        if user.password == password:  # Direct comparison
+            # Authentication successful
+            if not user.is_active:
+                return Response({
+                    'error': _('Your account is inactive.')
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Generate tokens for successful login
             refresh = RefreshToken.for_user(user)
             return Response({
                 'message': _('Login successful!'),
@@ -86,12 +94,15 @@ def login_view(request) -> Response:
                     'access': str(refresh.access_token),
                 }
             })
+        else:
+            return Response({
+                'error': _('Invalid email or password.')
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+    except CustomUser.DoesNotExist:
         return Response({
-            'error': _('Your account is inactive.')
-        }, status=status.HTTP_403_FORBIDDEN)
-    return Response({
-        'error': _('Invalid email or password.')
-    }, status=status.HTTP_401_UNAUTHORIZED)
+            'error': _('Invalid email or password.')
+        }, status=status.HTTP_401_UNAUTHORIZED)
 
 @api_view(['POST'])
 @login_required
@@ -204,3 +215,4 @@ def delete_account(request) -> Response:
         return Response({
             'error': _('Failed to delete account.')
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    

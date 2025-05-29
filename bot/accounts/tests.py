@@ -1,11 +1,8 @@
-from django.test import TestCase, Client
-from django.urls import reverse
+
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
-from .forms import UserRegistrationForm, UserProfileForm
 from django.core.files.uploadedfile import SimpleUploadedFile
-import os
 
 User = get_user_model()
 
