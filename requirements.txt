@@ -23,6 +23,12 @@ numpy>=1.26.0,<1.27.0  # Latest stable version
 django-debug-toolbar>=4.1.0,<4.2.0  # Latest stable version
 django-extensions>=3.1.0,<3.2.0  # Latest stable version
 
+# Embedding and Vector DB dependencies
+pinecone-client>=3.0.0,<4.0.0  # For Pinecone vector DB
+openai>=1.0.0,<2.0.0  # For OpenAI API
+langchain>=0.1.0,<0.2.0  # For LangChain core
+langchain-openai>=0.0.8,<0.1.0  # For LangChain OpenAI integration
+
 =======
 # Core Django and Web Framework
 Django>=5.2,<5.3  # Pin to major version for stability
@@ -47,5 +53,11 @@ pytest-asyncio>=0.21.0,<0.22.0  # Latest stable version
 numpy>=1.26.0,<1.27.0  # Latest stable version
 django-debug-toolbar>=4.1.0,<4.2.0  # Latest stable version
 django-extensions>=3.1.0,<3.2.0  # Latest stable version
+
+# Embedding and Vector DB dependencies
+pinecone-client>=3.0.0,<4.0.0  # For Pinecone vector DB
+openai>=1.0.0,<2.0.0  # For OpenAI API
+langchain>=0.1.0,<0.2.0  # For LangChain core
+langchain-openai>=0.0.8,<0.1.0  # For LangChain OpenAI integration
 
 >>>>>>> 512b1b8 (updates)

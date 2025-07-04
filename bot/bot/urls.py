@@ -7,19 +7,26 @@ The `urlpatterns` list routes URLs to views. For more information please see:
 
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
+# Define URL patterns with clear organization and documentation
 urlpatterns = [
-    # Admin interface
-    path("admin/", admin.site.urls),
+    # Admin interface - restricted access
+    path("admin/", admin.site.urls, name="admin"),
     
-    # Authentication
-    path("accounts/", include("accounts.urls", namespace="accounts")),
-    path("auth/", include("allauth.urls")),
+    # Authentication routes
+    path("accounts/", include("accounts.urls", namespace="accounts")),  # Custom auth views
+    #path("auth/", include("allauth.urls")),  # Third-party auth
     
-    # App routes - using namespaced URLs for better organization
-    path("conversations/", include("conversations.urls", namespace="conversations")),
-    path("dashboard/", include("dashboard.urls", namespace="dashboard")),
-    path("plans/", include("usage_plans.urls", namespace="plans")),
-    path("agents/", include("create_agent.urls", namespace="agents")),
-    path("integrations/", include("integrations.urls", namespace="integrations")),
+    # Core application routes - using namespaced URLs
+    path("conversations/", include("conversations.urls", namespace="conversations")),  # Chat functionality
+    path("dashboard/", include("dashboard.urls", namespace="dashboard")),  # User dashboard
+    path("plans/", include("plans.urls", namespace="plans")),  # Subscription plans
+    path("agents/", include("create_agent.urls", namespace="agents")),  # Agent management
+    path("integrations/", include("integrations.urls", namespace="integrations")),  # Third-party integrations
 ]
+
+# Add media serving in development only
+#if settings.DEBUG:
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

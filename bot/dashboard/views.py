@@ -1,61 +1,103 @@
-from django.shortcuts import render # type: ignore
-from rest_framework.views import APIView # type: ignore
+
 from rest_framework.response import Response # type: ignore
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from .models import DashboardStats
-from conversations.models import Conversation # type: ignore
+from conversations.models import Conversation, ConversationMessages # type: ignore
 from rest_framework import status # type: ignore
+from create_agent.models import Agent # type: ignore
+from django.utils import timezone
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
+    """
+    Get dashboard statistics for the authenticated user.
+    
+    Returns:
+        - Total agents, conversations, active conversations, and messages
+        - Trend data for conversations and messages over the last 2 days
+    """
     try:
-        stats = DashboardStats.objects.filter(user=request.user).first()
-        if not stats:
-            return Response(
-                {"error": "No dashboard stats found."}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+        # Get user's agents and related conversations
+        agents = Agent.objects.filter(user=request.user)
+        conversations = Conversation.objects.filter(agent__in=agents)
+        
+        # Calculate basic counts
+        no_of_agents = agents.count()
+        no_of_conversations = conversations.count()
+        no_of_active_conversations = conversations.filter(is_active=True).count()
+        no_of_messages = ConversationMessages.objects.filter(conversation__in=conversations).count()
+        
+        # Calculate trend data with proper date handling
+        today = timezone.now().date()
+        two_days_ago = today - timezone.timedelta(days=2)
+        one_day_ago = today - timezone.timedelta(days=1)
+        
+        # Get conversation counts for trend calculation
+        two_days_ago_conversations = conversations.filter(created_at__date=two_days_ago).count()
+        one_day_ago_conversations = conversations.filter(created_at__date=one_day_ago).count()
+        
+        # Calculate conversation change rate with division by zero protection
+        conversations_change_rate = 0
+        if two_days_ago_conversations > 0:
+            conversations_change_rate = ((one_day_ago_conversations - two_days_ago_conversations) / 
+                                       two_days_ago_conversations * 100)
+        
+        # Get message counts for trend calculation
+        two_days_ago_messages = ConversationMessages.objects.filter(
+            conversation__in=conversations, 
+            created_at__date=two_days_ago
+        ).count()
+        one_day_ago_messages = ConversationMessages.objects.filter(
+            conversation__in=conversations, 
+            created_at__date=one_day_ago
+        ).count()
+        
+        # Calculate message change rate with division by zero protection
+        messages_change_rate = 0
+        if two_days_ago_messages > 0:
+            messages_change_rate = ((one_day_ago_messages - two_days_ago_messages) / 
+                                  two_days_ago_messages * 100)
+        
         response_data = {
-            "totalConversations": stats.total_conversations(),
-            "activeUsers": stats.active_conversations(),
-            "avgResponseTime": stats.avg_response_time(),
-            "userSatisfaction": stats.user_satisfaction_rate(),
+            "totalAgents": no_of_agents,
+            "totalConversations": no_of_conversations,
+            "activeConversations": no_of_active_conversations,
+            "totalMessages": no_of_messages,
             "trends": {
                 "conversations": {
-                    "value": stats.conversations_change_rate(), 
-                    "isPositive": stats.check_conversations_rate_ispositive()
+                    "value": round(conversations_change_rate, 2), 
+                    "isPositive": conversations_change_rate > 0
                 },
-                "users": {
-                    "value": stats.active_conversations_change_rate(), 
-                    "isPositive": stats.check_active_conversations_rate_ispositive()
-                },
-                "responseTime": {
-                    "value": stats.avg_response_time_change_rate(), 
-                    "isPositive": stats.check_rate_ispositive_avg_response_time()
-                },
-                "satisfaction": {
-                    "value": stats.user_satisfaction_change_rate(), 
-                    "isPositive": stats.check_rate_ispositive_user_satisfaction()
+                "messages": {
+                    "value": round(messages_change_rate, 2), 
+                    "isPositive": messages_change_rate > 0
                 }
             }
         }
+        
         return Response(response_data, status=status.HTTP_200_OK)
-    except DashboardStats.DoesNotExist:
+        
+    except Exception as e:
         return Response(
-            {"error": "Dashboard stats not found."}, 
-            status=status.HTTP_404_NOT_FOUND
+            {"error": f"Failed to retrieve dashboard stats: {str(e)}"}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def recent_chats(request):
     try:
+        from django.db.models import Max
+        
+        agents = Agent.objects.filter(user=request.user)
+        # Order by the most recent message time using the related messages field
         conversations = Conversation.objects.filter(
-            user=request.user
-        ).order_by('-last_message_time')[:5]
+            agent__in=agents
+        ).annotate(
+            last_msg_time=Max('messages__message_time')
+        ).order_by('-last_msg_time')[:10]
         
         if not conversations:
             return Response(
@@ -79,35 +121,6 @@ def recent_chats(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def engagement_stats(request):
-    try:
-        stats = DashboardStats.objects.filter(user=request.user).first()
-        if not stats:
-            return Response(
-                {"error": "No engagement stats found."}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        conversations_data = stats.last_week_conversations()
-        responses_data = stats.last_week_responses()
-        
-        response_data = [
-            {
-                "name": day,
-                "conversations": conversations_data[day],
-                "responses": responses_data[i]
-            }
-            for i, day in enumerate(conversations_data.keys())
-        ]
-        
-        return Response(response_data, status=status.HTTP_200_OK)
-    except DashboardStats.DoesNotExist:
-        return Response(
-            {"error": "Engagement stats not found."}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
 
 @api_view(['GET'])
 def api_health_check(request):

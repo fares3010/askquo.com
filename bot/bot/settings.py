@@ -37,35 +37,36 @@ ALLOWED_HOSTS = [
     "aws-0-eu-central-1.pooler.supabase.com",
     "localhost",
     "127.0.0.1",
-    "04a3-156-214-196-78.ngrok-free.app"
+    "askquo.com",
+    "www.askquo.com",
+    "api.askquo.com",
+    "www.api.askquo.com",
+    "askquo.com",
+    "www.askquo.com",
+    "api.askquo.com",
+    "www.api.askquo.com",
 ]
 
 # Application definition
 INSTALLED_APPS = [
     # Custom apps (must come before django.contrib.auth)
     'accounts.apps.AccountsConfig',  # Custom user model must be loaded first
-    
+    'dashboard.apps.DashboardConfig',
+    'conversations.apps.ConversationsConfig',
+    'create_agent.apps.CreateAgentConfig',
+    'integrations.apps.IntegrationsConfig',
+    'plans.apps.PlansConfig',
+
     # Third-party apps
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
     'django.contrib.sites',
-    
-    # Allauth core
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-    
-    # Social providers
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.facebook',
-    
-    # Other custom apps
-    'dashboard.apps.DashboardConfig',
-    'conversations.apps.ConversationsConfig',
-    'create_agent.apps.CreateAgentConfig',
-    'integrations.apps.IntegrationsConfig',
-    'usage_plans.apps.UsagePlansConfig',
     
     # Django built-in apps
     'django.contrib.admin',
@@ -77,8 +78,8 @@ INSTALLED_APPS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://preview--chatty-user-homebase.lovable.app',
-    "https://04a3-156-214-196-78.ngrok-free.app"
+    'https://preview--askquo.lovable.app',
+    "https://askquo.com",
 ]
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
@@ -115,8 +116,8 @@ MIDDLEWARE = [
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    'https://preview--chatty-user-homebase.lovable.app',
-    'https://13.61.144.96',
+    'https://preview--askquo.lovable.app',
+    'https://askquo.com',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -140,6 +141,14 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-csrftoken',
     'x-api-key',
 ]
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+}
 
 ROOT_URLCONF = 'bot.urls'
 
@@ -214,6 +223,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = False

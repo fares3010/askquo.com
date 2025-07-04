@@ -1,47 +1,55 @@
 from django.db import models
 from django.utils import timezone
 from create_agent.models import Agent
+from create_agent.models import FrontendIntegrationClient
 
 class Conversation(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='agent_conversations')
     conversation_id = models.AutoField(primary_key=True)
     conversation_name = models.CharField(max_length=255, blank=True, null=True)
+    frontend_client = models.ForeignKey(FrontendIntegrationClient, on_delete=models.CASCADE, related_name='frontend_client_conversations', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_favorite = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
 
     def __str__(self):
         return self.conversation_name if self.conversation_name else str("unknown")    
     
     @property
     def last_message_obj(self):
-            return self.messages.last()
+        """Get the most recent message in the conversation."""
+        return self.messages.order_by('-message_time').first()
 
     @property
     def get_ordered_messages(self):
+        """Get all messages ordered by most recent first."""
         return self.messages.order_by('-message_time')
     
     def last_message_text(self):
-            last = self.last_message_obj
-            return last.message_text if last else None
+        """Get the text content of the most recent message."""
+        last = self.last_message_obj
+        return last.message_text if last else None
     
     def user_response_time(self):
+        """Calculate time between conversation creation and first user message."""
         last = self.last_message_obj
         if last and last.sender_type == 'user':
             return last.message_time - self.created_at
         return None
     
     def last_message_time(self):
-            last = self.last_message_obj
-            return last.message_time if last else None
+        """Get the timestamp of the most recent message."""
+        last = self.last_message_obj
+        return last.message_time if last else None
     
     def check_last_message_is_read(self):
+        """Check if the most recent message has been read."""
         last = self.last_message_obj
-        if last and last.is_read:
-            return True
-        return False
-  
-            
+        return last.is_read if last else False
     def unread_count(self):    
         return self.messages.filter(is_read=False).count()
     
@@ -56,6 +64,15 @@ class Conversation(models.Model):
             return True
         else:
             return False
+    def check_is_active_with_time(self, time):
+        if self.last_message_time() and timezone.now() - self.last_message_time() < time:
+            self.is_active = True
+            self.save()
+            return True
+        else:
+            self.is_active = False
+            self.save()
+            return False    
     
     def check_is_deleted(self):
         if self.messages.filter(is_deleted=True).exists():
@@ -137,6 +154,8 @@ class ConversationMessages(models.Model):
     is_read = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
 
 
@@ -154,6 +173,8 @@ class ConversationMessages(models.Model):
             "is_read": self.is_read,
             "is_deleted": self.is_deleted,
             "is_archived": self.is_archived,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
         }
     
 
@@ -230,7 +251,7 @@ class ConversationAttachments(models.Model):
 
 class ConversationTag(models.Model):
     conversation = models.ForeignKey(
-        'Conversation',
+        Conversation,
         on_delete=models.CASCADE,
         related_name='tags',
         help_text="The conversation this tag is associated with."
@@ -281,7 +302,7 @@ class ConversationTag(models.Model):
 
 class ConversationNotes(models.Model):
     conversation = models.ForeignKey(
-        'Conversation',
+        Conversation,
         on_delete=models.CASCADE,
         related_name='notes',
         help_text="The conversation this note is associated with."
@@ -330,7 +351,7 @@ class ConversationNotes(models.Model):
 
 class ConversationFeedback(models.Model):
     conversation = models.ForeignKey(
-        'Conversation',
+        Conversation,
         on_delete=models.CASCADE,
         related_name='feedback',
         help_text="The conversation this feedback is associated with."
