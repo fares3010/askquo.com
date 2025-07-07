@@ -91,10 +91,12 @@ def recent_chats(request):
     try:
         from django.db.models import Max
         
-        agents = Agent.objects.filter(user=request.user)
+        agents = Agent.objects.filter(user=request.user, is_deleted=False)
         # Order by the most recent message time using the related messages field
         conversations = Conversation.objects.filter(
-            agent__in=agents
+            agent__in=agents,
+            is_archived=False,
+            is_deleted=False
         ).annotate(
             last_msg_time=Max('messages__message_time')
         ).order_by('-last_msg_time')[:10]

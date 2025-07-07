@@ -266,7 +266,7 @@ class StripeGateway:
             logger.error(f"Unexpected error fetching subscriptions: {str(e)}")
             return StripeResponse(success=False, error=f"Unexpected error: {str(e)}")
 
-    def cancel_subscription(self, subscription: UserSubscription,stripe_customer: StripeCustomer, immediate: bool = False) -> StripeResponse:
+    def cancel_subscription(self, subscription: UserSubscription, stripe_customer: StripeCustomer, immediate: bool = False) -> StripeResponse:
         """Cancel a user's subscription"""
         try:
             if not subscription.stripe_subscription_id:
@@ -277,12 +277,12 @@ class StripeGateway:
             
             # Retrieve and verify subscription
             try:
-                subscription = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                stripe_subscription = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
             except stripe.error.InvalidRequestError:
                 return StripeResponse(success=False, error="Subscription not found")
             
             # Verify ownership by checking customer email
-            customer = stripe.Customer.retrieve(subscription.customer)
+            customer = stripe.Customer.retrieve(stripe_subscription.customer)
             if customer.email != stripe_customer.user.email:
                 return StripeResponse(success=False, error="Subscription does not belong to user")
             
@@ -294,7 +294,7 @@ class StripeGateway:
                     subscription.stripe_subscription_id,
                     cancel_at_period_end=True,
                     metadata={
-                        **subscription.metadata,
+                        **stripe_subscription.metadata,
                         'cancelled_by_user': str(stripe_customer.user.id),
                         'cancelled_at': str(int(time.time()))
                     }

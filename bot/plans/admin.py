@@ -2,6 +2,8 @@ from django.contrib import admin
 from .models import SubscriptionPlan, PlanFeature, UserSubscription, PlanPrice, StripeCustomer
 from django.contrib.auth.models import User
 from django.utils import timezone
+from .models import PayPalSubscription, PayPalWebhookEvent
+
 
 
 class PlanFeatureInline(admin.TabularInline):
@@ -211,6 +213,31 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
 
     def has_view_permission(self, request, obj=None):
         return True
+    
+class PayPalSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'paypal_subscription_id', 'status', 'next_billing_time', 'created_at')
+    list_filter = ('status', 'next_billing_time')
+    search_fields = ('user__username', 'user__email', 'paypal_subscription_id')
+    readonly_fields = ('created_at',)
+    
+    fieldsets = (
+        ('Subscription Information', {
+            'fields': ('user', 'paypal_subscription_id', 'status', 'next_billing_time')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+
+class PayPalWebhookEventAdmin(admin.ModelAdmin):
+    list_display = ('event_type', 'resource_id', 'processed', 'created_at')
+    list_filter = ('processed', 'created_at')
+    search_fields = ('event_type', 'resource_id')
+    readonly_fields = ('created_at',)
+    
+
+
 
 
 # Register models with their admin classes
@@ -219,3 +246,5 @@ admin.site.register(PlanFeature, PlanFeatureAdmin)
 admin.site.register(UserSubscription, UserSubscriptionAdmin)
 admin.site.register(PlanPrice, PlanPriceAdmin)
 admin.site.register(StripeCustomer, StripeCustomerAdmin)
+admin.site.register(PayPalSubscription, PayPalSubscriptionAdmin)
+admin.site.register(PayPalWebhookEvent, PayPalWebhookEventAdmin)

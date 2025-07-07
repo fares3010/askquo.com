@@ -37,14 +37,9 @@ ALLOWED_HOSTS = [
     "aws-0-eu-central-1.pooler.supabase.com",
     "localhost",
     "127.0.0.1",
-    "askquo.com",
-    "www.askquo.com",
-    "api.askquo.com",
-    "www.api.askquo.com",
-    "askquo.com",
-    "www.askquo.com",
-    "api.askquo.com",
-    "www.api.askquo.com",
+    '10.212.0.2',
+    '34.18.118.75',
+    "backend.askquo.com",
 ]
 
 # Application definition
@@ -61,6 +56,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'django.contrib.sites',
     'allauth',
     'allauth.account',
@@ -79,7 +75,7 @@ INSTALLED_APPS = [
 
 CSRF_TRUSTED_ORIGINS = [
     'https://preview--askquo.lovable.app',
-    "https://askquo.com",
+    "https://backend.askquo.com",
 ]
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
@@ -117,7 +113,7 @@ MIDDLEWARE = [
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
     'https://preview--askquo.lovable.app',
-    'https://askquo.com',
+    'https://backend.askquo.com',
 ]
 
 CORS_ALLOW_CREDENTIALS = True

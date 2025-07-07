@@ -9,6 +9,9 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from plans import views
+from plans.payment.paypal import PayPalWebhookView
+
 
 # Define URL patterns with clear organization and documentation
 urlpatterns = [
@@ -25,6 +28,8 @@ urlpatterns = [
     path("plans/", include("plans.urls", namespace="plans")),  # Subscription plans
     path("agents/", include("create_agent.urls", namespace="agents")),  # Agent management
     path("integrations/", include("integrations.urls", namespace="integrations")),  # Third-party integrations
+    path('webhook/', views.webhook_raw, name='webhook'),
+    path('paypal/webhook/', PayPalWebhookView.as_view(), name='paypal_webhook'),
 ]
 
 # Add media serving in development only

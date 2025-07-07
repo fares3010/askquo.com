@@ -9,5 +9,4 @@ urlpatterns = [
     path('get-user-subscription/', views.get_user_subscription, name='get_user_subscription'),
     path('cancel-user-subscription/', views.cancel_user_subscription, name='cancel_user_subscription'),
     path('get-user-subscription-history/', views.get_user_subscription_history, name='get_user_subscription_history'),
-    path('webhook/', views.webhook_raw, name='webhook'),  
 ]

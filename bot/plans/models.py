@@ -1,5 +1,4 @@
 from django.db import models
-from django.contrib.auth.models import User
 from django.forms import ValidationError
 from django.utils import timezone
 from datetime import timedelta
@@ -72,7 +71,70 @@ class StripeCustomer(models.Model):
         """Custom validation for the model."""  
         super().clean()
         if not self.stripe_customer_id:
-            raise DjangoValidationError("Stripe customer ID is required.")      
+            raise DjangoValidationError("Stripe customer ID is required.") 
+
+class PaypalCustomer(models.Model):
+    """
+    Model representing a Paypal customer.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='paypal_customers',
+        help_text="User who owns this Paypal customer"
+    )
+    paypal_customer_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Paypal customer ID for this customer"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Paypal Customer"
+        verbose_name_plural = "Paypal Customers"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['paypal_customer_id']),
+        ]
+
+    def __str__(self):
+        return f"Paypal Customer #{self.paypal_customer_id} - {self.user.username}"
+    
+    def to_dict(self):
+        """Converts customer to dictionary representation."""
+        return {
+            "paypal_customer_id": self.paypal_customer_id,
+            "user_id": self.user.id,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+    
+    def is_valid(self):
+        """Validates if the customer has all required fields."""
+        try:
+            return all([
+                self.paypal_customer_id and self.paypal_customer_id.strip(),
+                self.user and self.user.id,
+            ])
+        except Exception as e:
+            logger.error(f"Error validating customer {self.paypal_customer_id}: {e}")
+            return False
+        
+    def save(self, *args, **kwargs):
+        """Override save to automatically set paypal_customer_id."""
+        if not self.paypal_customer_id:
+            self.paypal_customer_id = self.user.id
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        """Custom validation for the model."""
+        super().clean()
+        if not self.paypal_customer_id:
+            raise DjangoValidationError("Paypal customer ID is required.")
 
 class SubscriptionPlan(models.Model):
     """
@@ -85,6 +147,13 @@ class SubscriptionPlan(models.Model):
         null=True,
         unique=True,
         help_text="Stripe product ID for this plan"
+    )
+    paypal_product_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Paypal product ID for this plan"
     )
     plan_name = models.CharField(
         max_length=255, 
@@ -286,6 +355,13 @@ class PlanPrice(models.Model):
         null=True,
         unique=True,    
         help_text="Stripe price ID for this plan"
+    )
+    paypal_price_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Paypal price ID for this plan"
     )
     price_amount = models.DecimalField(
         max_digits=10, 
@@ -547,6 +623,13 @@ class UserSubscription(models.Model):
         unique=True,
         help_text="Stripe subscription ID for this subscription"
     )
+    paypal_subscription_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Paypal subscription ID for this subscription"
+    )
     usage_start_date = models.DateTimeField(
         default=timezone.now, 
         help_text="Start date of subscription"
@@ -766,3 +849,132 @@ class StripeTransaction(models.Model):
             "transaction_receipt_url": self.transaction_receipt_url,
             "created_at": self.created_at,
         }
+    
+class PaypalTransaction(models.Model):
+    """
+    Model representing a transaction in Paypal.
+    """
+    transaction_id = models.BigAutoField(primary_key=True)
+    paypal_transaction_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Paypal transaction ID for this transaction"
+    )
+    user_email = models.EmailField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Email of the user who owns this transaction"
+    )
+    paypal_customer_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Paypal customer ID for this transaction"
+    )
+    transaction_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Amount of the transaction"
+    )
+    transaction_currency = models.CharField(
+        max_length=10,
+        default='USD',
+        help_text="Currency of the transaction"
+    )
+    transaction_status = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Status of the transaction"
+    )
+    transaction_receipt_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Receipt URL for the transaction"
+    )
+    transaction_metadata = models.JSONField(
+        blank=True,
+        null=True,
+        default=dict,
+        help_text="Additional metadata for the transaction"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Paypal Transaction #{self.transaction_id} - {self.user_email}"
+
+    def to_dict(self):
+        """Converts transaction to dictionary representation."""
+        return {
+            "transaction_id": self.transaction_id,
+            "transaction_amount": self.transaction_amount,
+            "transaction_currency": self.transaction_currency,
+            "transaction_status": self.transaction_status,
+            "transaction_receipt_url": self.transaction_receipt_url,
+            "created_at": self.created_at,
+        }
+
+class PayPalSubscription(models.Model):
+    STATUS_CHOICES = [
+        ('APPROVAL_PENDING', 'Approval Pending'),
+        ('APPROVED', 'Approved'),
+        ('ACTIVE', 'Active'),
+        ('SUSPENDED', 'Suspended'),
+        ('CANCELLED', 'Cancelled'),
+        ('EXPIRED', 'Expired'),
+    ]
+    
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='paypal_subscriptions')
+    paypal_subscription_id = models.CharField(max_length=100, unique=True, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='APPROVAL_PENDING', db_index=True)
+    plan_id = models.CharField(max_length=100, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    next_billing_time = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['paypal_subscription_id']),
+            models.Index(fields=['status', 'next_billing_time']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.paypal_subscription_id}"
+    
+    def clean(self):
+        if self.next_billing_time and self.next_billing_time < timezone.now():
+            raise ValidationError("Next billing time cannot be in the past")
+    
+    @property
+    def is_active(self):
+        return self.status == 'ACTIVE'
+    
+    @property
+    def is_expired(self):
+        return self.status == 'EXPIRED' or (self.next_billing_time and self.next_billing_time < timezone.now())
+
+class PayPalWebhookEvent(models.Model):
+    event_id = models.CharField(max_length=100, unique=True, db_index=True)
+    event_type = models.CharField(max_length=100, db_index=True)
+    resource_id = models.CharField(max_length=100, db_index=True)
+    processed = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    raw_data = models.JSONField()
+    processing_error = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['event_type', 'processed']),
+            models.Index(fields=['resource_id']),
+            models.Index(fields=['processed', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.event_type} - {self.event_id}"

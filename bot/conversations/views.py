@@ -32,20 +32,51 @@ logger = logging.getLogger(__name__)
 def conversations(request, agent_id):
     """Retrieve paginated and filtered conversations for authenticated user."""
     try:
-        agent = get_object_or_404(Agent,user=request.user, agent_id=agent_id)
+        agent = get_object_or_404(Agent,user=request.user, agent_id=agent_id, is_deleted=False)
         # Get and validate pagination parameters
         page = max(1, int(request.GET.get("page", 1)))
         limit = min(100, max(1, int(request.GET.get("limit", 10))))
 
         # Get filtered queryset with annotation for last message time
-        qs = Conversation.objects.filter(
+        filter_query = request.query_params.get("filter", "")
+        if filter_query == "archived":
+            qs = Conversation.objects.filter(
+            agent=agent,
+            is_active=False,
+            is_archived=True,
+            is_deleted=False
+            ).annotate(
+            last_msg_time=Max('messages__message_time')
+            )
+            logger.info(f"Archived conversations: {qs.count()}")
+        elif filter_query == "favorite":
+            qs = Conversation.objects.filter(
+            agent=agent,
+            is_favorite=True,
+            is_archived=False,
+            is_deleted=False
+            ).annotate(
+            last_msg_time=Max('messages__message_time')
+            )
+            logger.info(f"Favorite conversations: {qs.count()}")
+        elif filter_query == "all":
+            qs = Conversation.objects.filter(
+                agent=agent, 
+                is_archived=False, 
+                is_deleted=False
+            ).annotate(
+                last_msg_time=Max('messages__message_time')
+            )
+            logger.info(f"All conversations: {qs.count()}")
+        else:
+            qs = Conversation.objects.filter(
             agent=agent, 
             is_archived=False, 
             is_deleted=False
-        ).annotate(
+            ).annotate(
             last_msg_time=Max('messages__message_time')
-        )
-        
+            )
+            logger.info(f"All - conversations: {qs.count()}")
         # Calculate pagination
         total = qs.count()
         if total == 0:
@@ -73,6 +104,8 @@ def conversations(request, agent_id):
             "timestamp": conv.last_message_time(),
             "unread": conv.check_last_message_is_read(),
             "status": conv.check_is_active(),
+            "is_favorite": conv.is_favorite,
+            "is_archived": conv.is_archived,
             "agent_name": agent.name,
         } for conv in conversations]
         response_data = {

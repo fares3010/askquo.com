@@ -9,6 +9,7 @@ import logging
 import os 
 from .models import SubscriptionPlan, UserSubscription, PlanPrice
 from .payment.stripe_gateway import StripeGateway
+from .payment.paypal import create_paypal_subscription
 from django.views.decorators.csrf import csrf_exempt
 from dotenv import load_dotenv
 load_dotenv()
@@ -480,20 +481,29 @@ def create_checkout_session(request):
             )
         
         price = get_object_or_404(PlanPrice, price_id=price_id, is_active=True, is_deleted=False)
-        
-        stripe_gateway = StripeGateway()
-        checkout_session = stripe_gateway.checkout_session(user, price, success_url, cancel_url)
-
-        if not checkout_session.success:    
+        if price.paypal_price_id is None:
             return Response(
-                {"error": checkout_session.error},
+                {"error": "Paypal price ID is not set"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        return Response(
-            {"checkout_url": checkout_session.data['checkout_url']},
-            status=status.HTTP_200_OK
-        )   
+        checkout_url = create_paypal_subscription(plan_id=price.paypal_price_id)
+        return Response({"checkout_url": checkout_url}, status=status.HTTP_200_OK)
+        
+        #stripe_gateway = StripeGateway()
+        #checkout_session = stripe_gateway.checkout_session(user, price, success_url, cancel_url)
+
+
+        #if not checkout_session.success:    
+            #return Response(
+                #{"error": checkout_session.error},
+                #status=status.HTTP_400_BAD_REQUEST
+            #)
+        
+        #return Response(
+            #{"checkout_url": checkout_session.data['checkout_url']},
+            #status=status.HTTP_200_OK
+        #)   
     except Exception as e:
         logging.error(f"Unexpected error in create_checkout_session: {str(e)}")
         return Response(
@@ -523,5 +533,49 @@ def get_customer_portal_url(request):
         return Response(
             {"error": "Internal server error"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR        
+        )
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_paypal_subscription_view(request):
+    """
+    Create a PayPal subscription for the current user.
+    
+    Returns:
+        - 200: Subscription created successfully
+        - 400: Invalid request data
+        - 401: User not authenticated
+        - 500: Internal server error
+    """
+    try:
+        user = request.user
+        plan_id = request.data.get('plan_id')
+        
+        if not plan_id:
+            return Response(
+                {"error": "Missing required fields"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        plan = SubscriptionPlan.objects.get(plan_id=plan_id)
+        if plan.is_active == False or plan.is_deleted == True:
+            return Response(
+                {"error": "Plan is not active or deleted"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        price = PlanPrice.objects.get(plan=plan, is_active=True, is_deleted=False)
+        if price.paypal_price_id is None:
+            return Response(
+                {"error": "Paypal price ID is not set"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        approval_url = create_paypal_subscription(plan_id=price.paypal_price_id)
+        
+        return Response({"approval_url": approval_url}, status=status.HTTP_200_OK)
+    except Exception as e:
+        logging.error(f"Unexpected error in create_paypal_subscription_view: {str(e)}")
+        return Response(
+            {"error": "Internal server error"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     

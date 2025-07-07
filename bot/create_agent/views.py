@@ -344,7 +344,7 @@ def update_agent(request, agent_id):
         agent = get_object_or_404(Agent, agent_id=agent_id, user=request.user, is_deleted=False)
 
         # Get the agent vector database
-        vdb = get_object_or_404(AgentVectorsDatabase, agent=agent, is_deleted=False)
+        vdb = get_object_or_404(AgentVectorsDatabase, agent=agent)
         
         # Track which fields to update
         update_fields = ['updated_at']
@@ -409,8 +409,7 @@ def delete_agent(request, agent_id):
         # Get associated resources with select_related
         vdb = get_object_or_404(
             AgentVectorsDatabase.objects.select_related('agent'),
-            agent=agent,
-            is_deleted=False
+            agent=agent
         )
         
         # Get embeddings for cleanup
@@ -446,10 +445,9 @@ def delete_agent(request, agent_id):
             agent.updated_at = now
             agent.save(update_fields=['is_deleted', 'updated_at'])
             
-            # Soft delete vector database
-            vdb.is_deleted = True
+            # Update vector database timestamp
             vdb.updated_at = now
-            vdb.save(update_fields=['is_deleted', 'updated_at'])
+            vdb.save(update_fields=['updated_at'])
             
             # Soft delete embeddings
             if embeddings.exists():
@@ -1679,18 +1677,18 @@ def embed_agent_data(request, agent_id, object_type, object_id):
         encoding = tiktoken.encoding_for_model("text-embedding-3-small")
         num_tokens = len(encoding.encode(content))
         logger.info(f"Number of tokens: {num_tokens}")
-        if num_tokens > 8192:
-            logger.error(f"Number of tokens exceeds the limit of 8192 for {object_type} {object_id}")
-            return Response({
-                'error': 'Number of tokens exceeds the limit of 8192'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        #if num_tokens > 8192:
+            #logger.error(f"Number of tokens exceeds the limit of 8192 for {object_type} {object_id}")
+            #return Response({
+                #'error': 'Number of tokens exceeds the limit of 8192'
+           # }, status=status.HTTP_400_BAD_REQUEST)
         total_tokens = sum(len(encoding.encode(chunk)) for chunk in content_list)
         logger.info(f"Total number of tokens: {total_tokens}")
-        if total_tokens > 8192:
-            logger.error(f"Total number of tokens exceeds the limit of 8192 for {object_type} {object_id}")
-            return Response({
-                'error': 'Total number of tokens exceeds the limit of 8192'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        #if total_tokens > 8192:
+            #logger.error(f"Total number of tokens exceeds the limit of 8192 for {object_type} {object_id}")
+            #return Response({
+                #'error': 'Total number of tokens exceeds the limit of 8192'
+            #}, status=status.HTTP_400_BAD_REQUEST)
         cost_per_1k_tokens = 0.02
         cost = (total_tokens / 1000) * cost_per_1k_tokens
         logger.info(f"Cost: {cost}")
@@ -1767,7 +1765,7 @@ def delete_agent_embedding(request, agent_id, object_type, object_id):
     try:
         agent = get_object_or_404(Agent, agent_id=agent_id, user=request.user, is_deleted=False)
         embedding = get_object_or_404(AgentEmbeddings, agent=agent, object_id=object_id, object_type=object_type, is_deleted=False)
-        vdb = get_object_or_404(AgentVectorsDatabase, agent=agent, is_deleted=False)
+        vdb = get_object_or_404(AgentVectorsDatabase, agent=agent)
         
         with transaction.atomic():
             embedding.is_deleted = True

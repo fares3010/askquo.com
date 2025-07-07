@@ -8,7 +8,8 @@ from rest_framework.response import Response # type: ignore
 from rest_framework.decorators import api_view, permission_classes # type: ignore
 from rest_framework import status # type: ignore
 from rest_framework.permissions import IsAuthenticated, AllowAny # type: ignore
-from rest_framework_simplejwt.tokens import RefreshToken # type: ignore
+from rest_framework_simplejwt.tokens import RefreshToken, UntypedToken # type: ignore
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken # type: ignore
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import authenticate
 from django.middleware.csrf import get_token
@@ -17,6 +18,8 @@ from plans.models import UserSubscription, PlanPrice, PlanFeature
 from .models import Team, TeamMember, TeamAgent
 from create_agent.models import Agent
 from django.db import transaction
+from django.utils import timezone
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
 logger = logging.getLogger(__name__)
 
@@ -182,29 +185,133 @@ def auth_csrf_token(request) -> Response:
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def logout_view(request) -> Response:
-    """Handle user logout via API with token blacklisting"""
+    """Handle user logout via API with token blacklisting, cookie deletion, and improved error handling"""
     try:
+        # Validate refresh token presence
         refresh_token = request.data.get('refresh_token')
         if not refresh_token:
-            return Response({
-                'error': _('Refresh token is required.')
-            }, status=status.HTTP_400_BAD_REQUEST)
+            user_email = request.user.email if request.user.is_authenticated else "anonymous"
+            logger.warning(f"Logout attempt without refresh token for user: {user_email}")
             
-        token = RefreshToken(refresh_token)
-        token.blacklist()
-        logger.info(f"User logged out: {request.user.email}")
+            # Even if no refresh token, still clear cookies
+            response = Response({
+                'error': _('Refresh token is required for logout.')
+            }, status=status.HTTP_400_BAD_REQUEST)
+            _clear_auth_cookies(response)
+            return response
         
-        return Response({
-            'message': _('Successfully logged out.')
-        })
+        # Validate refresh token format
+        if not isinstance(refresh_token, str) or len(refresh_token.strip()) == 0:
+            user_email = request.user.email if request.user.is_authenticated else "anonymous"
+            logger.warning(f"Invalid refresh token format for user: {user_email}")
+            
+            response = Response({
+                'error': _('Invalid refresh token format.')
+            }, status=status.HTTP_400_BAD_REQUEST)
+            _clear_auth_cookies(response)
+            return response
+        
+        # Blacklist the refresh token
+        try:
+            # Parse the token to validate it
+            token = UntypedToken(refresh_token.strip())
+            logger.info(f"Token JTI: {token['jti']}")
+            
+            # Get the outstanding token and blacklist it
+            outstanding_token = OutstandingToken.objects.get(jti=token['jti'])
+            blacklisted_token, created = BlacklistedToken.objects.get_or_create(token=outstanding_token)
+            
+            user_email = request.user.email if request.user.is_authenticated else "anonymous"
+            if not created:
+                logger.info(f"Token was already blacklisted for user: {user_email}")
+            else:
+                logger.info(f"User successfully logged out: {user_email}")
+                
+        except OutstandingToken.DoesNotExist:
+            user_email = request.user.email if request.user.is_authenticated else "anonymous"
+            logger.error(f"Outstanding token not found for user {user_email}")
+            
+            response = Response({
+                'error': _('Invalid refresh token.')
+            }, status=status.HTTP_401_UNAUTHORIZED)
+            _clear_auth_cookies(response)
+            return response
+            
+        except Exception as token_error:
+            user_email = request.user.email if request.user.is_authenticated else "anonymous"
+            logger.error(f"Token blacklisting failed for user {user_email}: {str(token_error)}")
+            
+            response = Response({
+                'error': _('Invalid or expired refresh token.')
+            }, status=status.HTTP_401_UNAUTHORIZED)
+            _clear_auth_cookies(response)
+            return response
+        
+        # Successful logout - create response and clear cookies
+        response = Response({
+            'message': _('Successfully logged out.'),
+            'timestamp': timezone.now().isoformat()
+        }, status=status.HTTP_200_OK)
+        
+        # Clear all authentication-related cookies
+        _clear_auth_cookies(response)
+        
+        return response
+        
     except Exception as e:
-        logger.error(f"Logout failed: {str(e)}")
-        return Response({
-            'error': _('Error logging out.')
-        }, status=status.HTTP_400_BAD_REQUEST)
+        user_email = request.user.email if request.user.is_authenticated else "anonymous"
+        logger.error(f"Unexpected error during logout for user {user_email}: {str(e)}", exc_info=True)
+        
+        response = Response({
+            'error': _('An unexpected error occurred during logout. Please try again.')
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        _clear_auth_cookies(response)
+        return response
 
+
+def _clear_auth_cookies(response: Response) -> None:
+    """
+    Clear all authentication-related cookies from the response.
+    This ensures complete logout even if token blacklisting fails.
+    """
+    # Common cookie names for JWT tokens
+    cookie_names = [
+        'access_token',
+        'refresh_token',
+        'accessToken',
+        'refreshToken',
+        'jwt_access',
+        'jwt_refresh',
+        'auth_token',
+        'session_token',
+        'csrftoken',
+        'sessionid',
+    ]
+    
+    # Cookie deletion settings
+    cookie_settings = {
+        'path': '/',
+        'domain': None,
+    }
+    
+    # Clear each cookie
+    for cookie_name in cookie_names:
+        response.delete_cookie(cookie_name, **cookie_settings)
+    
+    # Also try to clear cookies with different path settings
+    # Some cookies might be set with specific paths
+    for cookie_name in ['access_token', 'refresh_token', 'auth_token']:
+        response.delete_cookie(cookie_name, path='/api/', **{k: v for k, v in cookie_settings.items() if k != 'path'})
+        response.delete_cookie(cookie_name, path='/auth/', **{k: v for k, v in cookie_settings.items() if k != 'path'})
+    
+    # Add security headers
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    
+    logger.info("Authentication cookies cleared successfully")
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def profile_view(request) -> Response:
@@ -1243,7 +1350,7 @@ def get_team_list(request) -> Response:
             'error': _('Failed to retrieve team list. Please try again.')
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-@api_view(['DELETE'])
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def delete_team(request) -> Response:
     """Handle team deletion via API with improved validation and error handling"""
