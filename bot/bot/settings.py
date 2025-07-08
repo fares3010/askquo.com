@@ -75,6 +75,7 @@ INSTALLED_APPS = [
 
 CSRF_TRUSTED_ORIGINS = [
     'https://preview--askquo.lovable.app',
+    'https://askquo.com'
     "https://backend.askquo.com",
 ]
 
@@ -113,6 +114,7 @@ MIDDLEWARE = [
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
     'https://preview--askquo.lovable.app',
+    'https://askquo.com'
     'https://backend.askquo.com',
 ]
 
